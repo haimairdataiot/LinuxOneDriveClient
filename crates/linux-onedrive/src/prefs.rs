@@ -46,7 +46,10 @@ pub fn show(app: &Rc<App>, parent: Option<&gtk::Window>) {
 }
 
 fn build(app: &Rc<App>, doc: SettingsDoc) -> adw::PreferencesDialog {
-    let dialog = adw::PreferencesDialog::builder().title("Settings").search_enabled(true).build();
+    // A fixed height (pages scroll): by default the dialog is as tall as its
+    // longest page, which does not fit on a small laptop screen when the
+    // dialog opens as a window of its own.
+    let dialog = adw::PreferencesDialog::builder().title("Settings").search_enabled(true).content_height(640).build();
     let model = app.model();
     let acct = app.current_account();
 

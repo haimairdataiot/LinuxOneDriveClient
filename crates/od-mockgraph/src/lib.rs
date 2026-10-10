@@ -147,6 +147,9 @@ pub struct DriveState {
     pub drives: Vec<MockDrive>,
     /// Account type of the signed-in user's drive.
     pub my_drive_type: String,
+    /// Name and address of the signed-in user.
+    pub user_name: String,
+    pub user_email: String,
     /// Offer delta on folders of business drives (SharePoint Online does;
     /// older services and national clouds only offer it on the root).
     pub business_folder_delta: bool,
@@ -209,6 +212,8 @@ impl DriveState {
             allow_anonymous_links: true,
             drives: Vec::new(),
             my_drive_type: "personal".into(),
+            user_name: "Mock User".into(),
+            user_email: "mock.user@example.com".into(),
             business_folder_delta: false,
             release: None,
         }
@@ -581,6 +586,13 @@ impl MockGraph {
         self.state.lock().unwrap().business_folder_delta = on;
     }
 
+    /// Name and address of the signed-in user (demos and screenshots).
+    pub fn set_user(&self, name: &str, email: &str) {
+        let mut s = self.state.lock().unwrap();
+        s.user_name = name.to_string();
+        s.user_email = email.to_string();
+    }
+
     /// The signed-in user has a work or school account.
     pub fn set_business(&self, on: bool) {
         self.state.lock().unwrap().my_drive_type = if on { "business" } else { "personal" }.into();
@@ -918,8 +930,8 @@ async fn handle(
         use base64::Engine as _;
         let claims = serde_json::json!({
             "tid": "9188040d-6c67-4c5b-b112-36a304b66dad",
-            "name": "Mock User",
-            "preferred_username": "mock.user@example.com"
+            "name": s.user_name,
+            "preferred_username": s.user_email
         });
         let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());
         return ok_json(json!({
@@ -1109,8 +1121,8 @@ async fn handle(
 
     match (method.clone(), p.as_str()) {
         (Method::GET, "/me") => ok_json(json!({
-            "id": "user-1", "displayName": "Mock User", "mail": "mock.user@example.com",
-            "userPrincipalName": "mock.user@example.com"
+            "id": "user-1", "displayName": s.user_name, "mail": s.user_email,
+            "userPrincipalName": s.user_email
         })),
         (Method::GET, "/organization") => ok_json(json!({ "value": [] })),
         (Method::GET, "/me/people") => {
@@ -1132,7 +1144,7 @@ async fn handle(
             ok_json(json!({
                 "id": DRIVE_ID, "driveType": s.my_drive_type, "name": "OneDrive",
                 "webUrl": "https://onedrive.example/",
-                "owner": { "user": { "displayName": "Mock User" } },
+                "owner": { "user": { "displayName": s.user_name } },
                 "quota": { "total": s.quota_total, "used": used, "remaining": s.quota_total.saturating_sub(used),
                            "deleted": 0, "state": "normal" }
             }))
@@ -1532,7 +1544,7 @@ fn items_route(
         }
         (Method::GET, "permissions") => {
             let mut v = vec![json!({ "id": "owner", "roles": ["owner"],
-                "grantedTo": { "user": { "id": "user-1", "displayName": "Mock User", "email": "mock.user@example.com" } } })];
+                "grantedTo": { "user": { "id": "user-1", "displayName": s.user_name, "email": s.user_email } } })];
             v.extend(s.permissions.get(&id).cloned().unwrap_or_default());
             // Personal drives report permissions inherited from parent folders.
             let mut cur = item.parent.clone();
@@ -1618,7 +1630,7 @@ fn items_route(
                 .collect();
             v.push(
                 json!({ "id": "current", "lastModifiedDateTime": item.mtime.to_rfc3339(), "size": item.content.len(),
-                           "lastModifiedBy": { "user": { "displayName": "Mock User" } } }),
+                           "lastModifiedBy": { "user": { "displayName": s.user_name } } }),
             );
             v.reverse();
             ok_json(json!({ "value": v }))

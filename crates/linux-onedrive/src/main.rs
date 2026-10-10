@@ -312,6 +312,10 @@ fn main() -> glib::ExitCode {
     if let Err(e) = <Args as clap::Parser>::try_parse() {
         e.exit();
     }
+    // Windows that don't belong to the application object (dialogs opened on
+    // their own) take their identity from the program name: with the
+    // application ID there, the desktop shows them under the app's icon too.
+    glib::set_prgname(Some(od_core::APP_ID));
     let gtk_app = adw::Application::builder()
         .application_id(od_core::APP_ID)
         .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE)

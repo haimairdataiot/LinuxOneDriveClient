@@ -4,6 +4,17 @@ All notable changes to Linux OneDrive. Versions follow `MAJOR.MINOR.PATCH`; each
 release is tagged `vX.Y.Z` and published on
 [GitHub](https://github.com/haimairdataiot/LinuxOneDriveClient/releases).
 
+## Unreleased
+
+### Fixed
+- Settings opened from the tray icon now fits on small laptop screens (its pages scroll
+  instead of making the window as tall as the longest page).
+- Settings, Share and other dialogs opened on their own appear under the Linux OneDrive
+  icon in the dock and the window switcher, not as a separate unnamed program.
+
+### Documentation
+- Screenshots in the README.
+
 ## 0.2.0 - 2026-10-10
 
 ### Added

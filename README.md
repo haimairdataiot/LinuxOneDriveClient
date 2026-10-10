@@ -14,6 +14,10 @@ on Windows.
 Not affiliated with, endorsed by or supported by Microsoft. "OneDrive", "SharePoint" and
 "Microsoft 365" are trademarks of Microsoft Corporation.
 
+<p align="center">
+  <img src="data/screenshots/files.png" width="800" alt="A OneDrive folder in Files. Each file has a status badge: a cloud for files that are only online, a tick for files on this device, a filled tick for files that are always kept. The right-click menu has a OneDrive section with Always Keep on This Device, Free Up Space, Share, Copy Link, Manage Access, View Online and Version History.">
+</p>
+
 ## What it does
 
 - **Files On-Demand.** Every file is visible at once; content downloads when opened. *Always
@@ -32,6 +36,23 @@ Not affiliated with, endorsed by or supported by Microsoft. "OneDrive", "SharePo
 - A command-line tool, `linux-onedrivectl`.
 
 Personal, work and school accounts are supported.
+
+## Screenshots
+
+The pictures show a made-up account with sample files.
+
+<p align="center">
+  <img src="data/screenshots/tray.png" width="160" align="top" alt="The tray icon in the top bar with its menu: sync status, Show Activity, Open OneDrive Folder, View Online, Pause Syncing, Settings and Quit.">
+  <img src="data/screenshots/activity.png" width="280" align="top" alt="The activity panel: Your files are synced, a list of recently uploaded and downloaded files, and the storage in use.">
+  <img src="data/screenshots/share.png" width="317" align="top" alt="The Share dialog for a document: share with people by name or email with a permission and a message, or copy a link.">
+</p>
+<p align="center">
+  <sub>The tray menu, the activity panel and sharing.</sub>
+</p>
+<p align="center">
+  <img src="data/screenshots/settings.png" width="415" alt="Settings, Sync and back up page: Files On-Demand (free up disk space or download all files), backup of important folders, and preferences such as starting at sign-in and pausing on metered networks."><br>
+  <sub>Settings.</sub>
+</p>
 
 ## Install
 
@@ -122,7 +143,7 @@ crates/
   linux-onedrive/     the app and tray icon
   linux-onedrivectl/  command-line tool
 integration/          Files (Nautilus) extension, Dolphin service menu
-data/                 systemd unit, desktop entries, icons, metainfo
+data/                 systemd unit, desktop entries, icons, metainfo, screenshots
 packaging/            package build script, release notes helper
 docs/                 user guide
 ```
