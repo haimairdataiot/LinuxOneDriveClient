@@ -275,6 +275,11 @@ impl SetupWindow {
             );
             return;
         }
+        if !util::web_view_available() {
+            // The built-in page would take the whole app down with it.
+            self.start_browser(app);
+            return;
+        }
         let hint = self.email.text().trim().to_string();
         self.sign_in_button.set_sensitive(false);
         let me = self.clone();

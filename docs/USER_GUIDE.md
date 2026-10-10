@@ -172,6 +172,9 @@ notes are on [GitHub](https://github.com/haimairdataiot/LinuxOneDriveClient/rele
   unexpectedly. Restarting it cleans this up automatically.
 - **No tray icon on GNOME:** enable the AppIndicator extension in *Extensions*.
 - **No emblems in Files:** install `python3-nautilus` and run `nautilus -q`.
+- **The app closes when you press Sign In (Ubuntu 24.04, version 0.2.0):** update to 0.2.1
+  or newer. Until then, sign in from a terminal with `linux-onedrivectl login`, which uses
+  your web browser.
 - **Sign-in with a code** (`login --device`) is only available when you use your own
   Microsoft app registration (`client_id` under `[general]` in the settings file).
 - **Your organisation needs admin approval:** the sign-in window says so and shows the

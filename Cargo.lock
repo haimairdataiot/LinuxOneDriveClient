@@ -1697,7 +1697,7 @@ dependencies = [
 
 [[package]]
 name = "linux-onedrive"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -1720,7 +1720,7 @@ dependencies = [
 
 [[package]]
 name = "linux-onedrivectl"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1736,7 +1736,7 @@ dependencies = [
 
 [[package]]
 name = "linux-onedrived"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2019,7 +2019,7 @@ dependencies = [
 
 [[package]]
 name = "od-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2037,7 +2037,7 @@ dependencies = [
 
 [[package]]
 name = "od-engine"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2067,7 +2067,7 @@ dependencies = [
 
 [[package]]
 name = "od-graph"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2091,7 +2091,7 @@ dependencies = [
 
 [[package]]
 name = "od-mockgraph"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "base64 0.22.1",

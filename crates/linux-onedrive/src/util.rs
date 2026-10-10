@@ -3,6 +3,8 @@
 use adw::prelude::*;
 use gtk::{gdk, gio};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 /// Directory with our icons when running from a source checkout.
 pub fn dev_icon_dir() -> Option<PathBuf> {
@@ -23,6 +25,36 @@ pub fn install_icon_search_path() {
     {
         gtk::IconTheme::for_display(&display).add_search_path(dir);
     }
+}
+
+/// Whether the embedded web view (Microsoft's sign-in page) can start.
+///
+/// WebKitGTK runs its helper processes in a sandbox made by `bwrap`, and
+/// stops the whole app when that sandbox cannot be created. That happens
+/// where unprivileged user namespaces are restricted: on Ubuntu 24.04 and
+/// newer only programs with an AppArmor profile that allows them get one
+/// (the package installs such a profile for `/usr/bin/linux-onedrive`; a copy
+/// of the app run from elsewhere has none). Asked once, with the same tool.
+pub fn web_view_available() -> bool {
+    static AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        let probe = Command::new("bwrap")
+            .args(["--ro-bind", "/", "/", "true"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        match probe {
+            Ok(status) if !status.success() => {
+                tracing::warn!(
+                    "the sandbox for the built-in sign-in page can't be created here; using the web browser"
+                );
+                false
+            }
+            // It works, or there is no bwrap to ask (then WebKitGTK does not use it either).
+            _ => true,
+        }
+    })
 }
 
 /// A row that acts as a button (libadwaita 1.6 has `ButtonRow`; this also

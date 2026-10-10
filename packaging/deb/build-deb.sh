@@ -39,6 +39,8 @@ install -Dm644 data/systemd/linux-onedrived.service "$STAGE/usr/lib/systemd/user
 install -Dm644 data/dbus-1/com.airdataiot.LinuxOneDrive.Daemon.service "$STAGE/usr/share/dbus-1/services/com.airdataiot.LinuxOneDrive.Daemon.service"
 install -Dm644 data/applications/com.airdataiot.LinuxOneDrive.desktop "$STAGE/usr/share/applications/com.airdataiot.LinuxOneDrive.desktop"
 install -Dm644 data/autostart/com.airdataiot.LinuxOneDrive.desktop "$STAGE/etc/xdg/autostart/com.airdataiot.LinuxOneDrive.desktop"
+# Lets the sign-in page's sandbox start on Ubuntu 24.04 and newer (see the file).
+install -Dm644 data/apparmor/linux-onedrive "$STAGE/etc/apparmor.d/linux-onedrive"
 install -Dm644 data/metainfo/com.airdataiot.LinuxOneDrive.metainfo.xml "$STAGE/usr/share/metainfo/com.airdataiot.LinuxOneDrive.metainfo.xml"
 (cd data/icons && find hicolor -name '*.svg' -print0 | while IFS= read -r -d '' f; do
   install -Dm644 "$f" "$STAGE/usr/share/icons/$f"
@@ -101,6 +103,10 @@ set -e
 if [ "$1" = "configure" ]; then
     # Start the sync service in every graphical session from now on.
     systemctl --global enable linux-onedrived.service >/dev/null 2>&1 || true
+    # Load the AppArmor profile now, so sign-in works without a restart.
+    if command -v apparmor_parser >/dev/null 2>&1 && aa-enabled --quiet 2>/dev/null; then
+        apparmor_parser -r -T -W /etc/apparmor.d/linux-onedrive >/dev/null 2>&1 || true
+    fi
 fi
 exit 0
 POSTINST
@@ -109,6 +115,9 @@ cat > "$STAGE/DEBIAN/prerm" <<'PRERM'
 set -e
 if [ "$1" = "remove" ]; then
     systemctl --global disable linux-onedrived.service >/dev/null 2>&1 || true
+    if command -v apparmor_parser >/dev/null 2>&1 && aa-enabled --quiet 2>/dev/null; then
+        apparmor_parser -R /etc/apparmor.d/linux-onedrive >/dev/null 2>&1 || true
+    fi
 fi
 exit 0
 PRERM

@@ -481,6 +481,10 @@ impl Dialog {
     }
 
     fn enable_suggestions(&self, button: &gtk::Button) {
+        if !util::web_view_available() {
+            self.toast("People suggestions need the built-in sign-in page, which can't start on this system");
+            return;
+        }
         let acct = self.account();
         let (me, b) = (self.clone(), button.clone());
         client::call(

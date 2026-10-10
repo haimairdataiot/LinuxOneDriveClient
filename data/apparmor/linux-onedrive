@@ -1,0 +1,18 @@
+# Linux OneDrive shows Microsoft's sign-in page in an embedded web view
+# (WebKitGTK). WebKitGTK runs its helper processes in a sandbox built with
+# unprivileged user namespaces, and Ubuntu 24.04 and newer only allow those
+# to programs whose AppArmor profile says so. Without this file the app
+# stops as soon as the sign-in page opens.
+#
+# Like the profiles Ubuntu ships for its own web-view applications, this one
+# restricts nothing: it gives the program a name and that one permission.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile linux-onedrive /usr/bin/linux-onedrive flags=(unconfined) {
+  userns,
+
+  # Site-specific additions and overrides. See local/README for details.
+  include if exists <local/linux-onedrive>
+}

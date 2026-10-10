@@ -143,7 +143,7 @@ crates/
   linux-onedrive/     the app and tray icon
   linux-onedrivectl/  command-line tool
 integration/          Files (Nautilus) extension, Dolphin service menu
-data/                 systemd unit, desktop entries, icons, metainfo, screenshots
+data/                 systemd unit, desktop entries, AppArmor profile, icons, metainfo, screenshots
 packaging/            package build script, release notes helper
 docs/                 user guide
 ```

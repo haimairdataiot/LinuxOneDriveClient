@@ -4,9 +4,15 @@ All notable changes to Linux OneDrive. Versions follow `MAJOR.MINOR.PATCH`; each
 release is tagged `vX.Y.Z` and published on
 [GitHub](https://github.com/haimairdataiot/LinuxOneDriveClient/releases).
 
-## Unreleased
+## 0.2.1 - 2026-10-10
 
 ### Fixed
+- **Signing in no longer closes the app on Ubuntu 24.04.** The built-in sign-in page needs
+  a permission that Ubuntu 24.04 only gives to programs with an AppArmor profile, and the
+  package had none, so the app stopped as soon as the page opened. The package now
+  installs that profile.
+- Where the built-in sign-in page still can't start (for example a copy of the app run
+  from outside `/usr/bin`), sign-in continues in your web browser instead.
 - Settings opened from the tray icon now fits on small laptop screens (its pages scroll
   instead of making the window as tall as the longest page).
 - Settings, Share and other dialogs opened on their own appear under the Linux OneDrive
