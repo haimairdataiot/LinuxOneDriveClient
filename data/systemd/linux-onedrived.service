@@ -1,0 +1,27 @@
+[Unit]
+Description=Linux OneDrive sync daemon (Files On-Demand)
+Documentation=https://github.com/haimairdataiot/LinuxOneDriveClient
+PartOf=graphical-session.target
+After=graphical-session.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=main
+BusName=com.airdataiot.LinuxOneDrive.Daemon
+# Clean up mounts left behind by a crash (AppArmor blocks fusermount3's
+# auto_unmount on Ubuntu), before starting and after stopping.
+ExecStartPre=-/usr/bin/linux-onedrived --cleanup
+ExecStart=/usr/bin/linux-onedrived
+ExecStopPost=-/usr/bin/linux-onedrived --cleanup
+Restart=on-failure
+RestartSec=5s
+KillMode=mixed
+TimeoutStopSec=30s
+Slice=app.slice
+# No sandboxing on purpose: mount namespaces hide the FUSE mount from the
+# session and NoNewPrivileges breaks the setuid fusermount3 helper.
+
+[Install]
+WantedBy=graphical-session.target

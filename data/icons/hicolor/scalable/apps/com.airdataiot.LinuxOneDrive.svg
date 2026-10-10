@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#62a0ea"/>
+      <stop offset="1" stop-color="#1c71d8"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a5fb4"/>
+      <stop offset="1" stop-color="#174d97"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(0 4) scale(8)">
+    <path fill="url(#shade)" d="M8.5 2.55A4.5 4.5 0 0 0 4.23 5.63A3.5 3.5 0 0 0 4 12.55H12.5A3.5 3.5 0 0 0 13.07 5.6A4.5 4.5 0 0 0 8.5 2.55Z"/>
+    <path fill="url(#sky)" d="M8.5 2A4.5 4.5 0 0 0 4.23 5.08A3.5 3.5 0 0 0 4 12H12.5A3.5 3.5 0 0 0 13.07 5.05A4.5 4.5 0 0 0 8.5 2Z"/>
+    <path fill="#ffffff" d="M6.2 10.4V7.6H5L6.9 5.4L8.8 7.6H7.6V10.4ZM9.6 6.6V9.4H8.4L10.3 11.6L12.2 9.4H11V6.6Z"/>
+  </g>
+</svg>

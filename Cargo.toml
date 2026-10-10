@@ -1,0 +1,70 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/od-core",
+    "crates/od-graph",
+    "crates/od-engine",
+    "crates/od-mockgraph",
+    "crates/linux-onedrived",
+    "crates/linux-onedrive",
+    "crates/linux-onedrivectl",
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.92"
+license = "GPL-3.0-or-later"
+authors = ["Linux OneDrive contributors"]
+repository = "https://github.com/haimairdataiot/LinuxOneDriveClient"
+
+[workspace.dependencies]
+od-core = { path = "crates/od-core" }
+od-graph = { path = "crates/od-graph" }
+od-engine = { path = "crates/od-engine" }
+od-mockgraph = { path = "crates/od-mockgraph" }
+
+anyhow = "1"
+thiserror = "2"
+tokio = { version = "1.47", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures = "0.3"
+bytes = "1"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream", "http2", "form", "query"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+url = "2"
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.9"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+rusqlite = { version = "0.40", default-features = false, features = ["cache"] }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+fuser = { version = "0.18", default-features = false }
+ksni = { version = "0.3", default-features = false, features = ["tokio"] }
+oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto"] }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
+webkit = { package = "webkit6", version = "0.6", features = ["v2_44"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-journald = "0.3"
+libc = "0.2"
+directories = "6"
+axum = { version = "0.8", features = ["ws"] }
+tempfile = "3"
+clap = { version = "4", features = ["derive"] }
+humantime = "2"
+glob = "0.3"
+async-channel = "2"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+png = "0.18"
+md-5 = "0.10"
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = "debuginfo"

@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=com.airdataiot.LinuxOneDrive.Daemon
+Exec=/usr/bin/linux-onedrived
+SystemdService=linux-onedrived.service

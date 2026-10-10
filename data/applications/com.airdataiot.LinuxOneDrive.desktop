@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Name=Linux OneDrive
+GenericName=Cloud Storage
+Comment=Access and sync your OneDrive files, with files downloaded on demand
+Exec=linux-onedrive %U
+Icon=com.airdataiot.LinuxOneDrive
+Terminal=false
+Categories=Network;FileTransfer;GTK;GNOME;
+Keywords=OneDrive;Microsoft;cloud;sync;files;backup;
+StartupNotify=true
+X-GNOME-UsesNotifications=true
+MimeType=x-scheme-handler/odopen;
+Actions=open-folder;settings;
+
+[Desktop Action open-folder]
+Name=Open OneDrive Folder
+Exec=linux-onedrive --show folder
+
+[Desktop Action settings]
+Name=Settings
+Exec=linux-onedrive --show settings

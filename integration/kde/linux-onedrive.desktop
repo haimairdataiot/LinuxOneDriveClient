@@ -1,0 +1,38 @@
+[Desktop Entry]
+Type=Service
+MimeType=application/octet-stream;inode/directory;all/allfiles;
+Actions=keep;free;share;copylink;access;versions;
+X-KDE-Submenu=OneDrive
+X-KDE-Priority=TopLevel
+X-KDE-Protocols=file
+Icon=com.airdataiot.LinuxOneDrive
+
+[Desktop Action keep]
+Name=Always Keep on This Device
+Icon=emblem-linux-onedrive-pinned
+Exec=linux-onedrivectl pin %F
+
+[Desktop Action free]
+Name=Free Up Space
+Icon=emblem-linux-onedrive-online
+Exec=linux-onedrivectl free %F
+
+[Desktop Action share]
+Name=Share…
+Icon=emblem-linux-onedrive-shared
+Exec=linux-onedrive --show share:%f
+
+[Desktop Action copylink]
+Name=Copy Link
+Icon=insert-link
+Exec=linux-onedrive --show copy-link:%f
+
+[Desktop Action access]
+Name=Manage Access
+Icon=system-users
+Exec=linux-onedrive --show manage-access:%f
+
+[Desktop Action versions]
+Name=Version History
+Icon=document-open-recent
+Exec=linux-onedrive --show versions:%f

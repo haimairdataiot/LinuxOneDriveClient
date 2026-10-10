@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Linux OneDrive
+Comment=Tray icon and status for OneDrive syncing
+Exec=linux-onedrive --background
+Icon=com.airdataiot.LinuxOneDrive
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-UsesNotifications=true

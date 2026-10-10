@@ -1,0 +1,26 @@
+[package]
+name = "linux-onedrive"
+description = "linux-onedrive GTK4/libadwaita app and tray icon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+od-core.workspace = true
+gtk.workspace = true
+adw.workspace = true
+webkit.workspace = true
+ksni.workspace = true
+zbus.workspace = true
+tokio.workspace = true
+futures.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+clap.workspace = true
+async-channel.workspace = true
+url.workspace = true
+serde.workspace = true

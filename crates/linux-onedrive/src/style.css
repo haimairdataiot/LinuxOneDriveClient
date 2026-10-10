@@ -1,0 +1,41 @@
+/* Linux OneDrive: a few touches on top of libadwaita. */
+
+.status-card {
+  padding: 24px 18px 18px 18px;
+}
+
+/* OneDrive's convention: a blue cloud when all is well. */
+.status-card .status-icon {
+  color: @blue_3;
+}
+
+.status-card.state-error .status-icon,
+.status-card.state-signin-required .status-icon {
+  color: @error_color;
+}
+
+.status-card.state-paused .status-icon,
+.status-card.state-offline .status-icon {
+  color: @warning_color;
+}
+
+.status-card.state-idle .status-icon,
+.status-card.state-syncing .status-icon {
+  color: @blue_3;
+}
+
+.storage-footer {
+  padding: 10px 14px 12px 14px;
+}
+
+.activity-heading {
+  margin: 6px 14px 4px 14px;
+}
+
+.setup-hero {
+  margin-top: 12px;
+}
+
+.ondemand-icon {
+  min-width: 32px;
+}

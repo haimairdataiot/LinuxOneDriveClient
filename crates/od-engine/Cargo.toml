@@ -1,0 +1,41 @@
+[package]
+name = "od-engine"
+description = "Metadata store, sync engine and FUSE virtual filesystem for linux-onedrive"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+od-core.workspace = true
+od-graph.workspace = true
+rusqlite.workspace = true
+fuser.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+bytes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+libc.workspace = true
+image.workspace = true
+png.workspace = true
+md-5.workspace = true
+tokio-tungstenite.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+od-mockgraph.workspace = true
+tempfile.workspace = true
+tracing-subscriber.workspace = true
+libc.workspace = true
+fuser.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+image.workspace = true
+od-graph.workspace = true
+od-core.workspace = true

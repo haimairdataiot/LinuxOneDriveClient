@@ -1,0 +1,11 @@
+*~
+/build/
+/dist/
+dist/
+.idea/
+*.pyc
+__pycache__/
+**/*.rs.bk
+*.swp
+/target/
+.vscode/

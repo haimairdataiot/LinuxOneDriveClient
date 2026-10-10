@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.airdataiot.LinuxOneDrive</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Linux OneDrive</name>
+  <summary>Unofficial OneDrive client with files on demand</summary>
+  <description>
+    <p>
+      Linux OneDrive brings your whole OneDrive to a folder on your computer. Files appear
+      instantly and download only when you open them, like Files On-Demand on Windows.
+      Changes sync in the background, conflicting edits keep both versions, and accidental
+      mass deletions are held until you confirm.
+    </p>
+    <p>Not affiliated with or endorsed by Microsoft. OneDrive is a trademark of Microsoft Corporation.</p>
+  </description>
+  <launchable type="desktop-id">com.airdataiot.LinuxOneDrive.desktop</launchable>
+  <developer id="com.airdataiot"><name>airdataiot</name></developer>
+  <url type="homepage">https://github.com/haimairdataiot/LinuxOneDriveClient</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.2.0" date="2026-10-10"/>
+    <release version="0.1.0" date="2026-10-09"/>
+  </releases>
+</component>

@@ -1,0 +1,45 @@
+# Build and test every push and pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config \
+            libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libsqlite3-dev fuse3 dbus
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Unit tests and Graph client tests
+        run: cargo test --locked -p od-core -p od-graph -p od-mockgraph
+
+  # The end-to-end suites mount real FUSE filesystems and start the service on
+  # a private D-Bus. Hosted runners don't always allow that, so this job
+  # reports its result without failing the build.
+  end-to-end:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config \
+            libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libsqlite3-dev fuse3 dbus
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Engine and service tests
+        run: cargo test --locked -p od-engine -p linux-onedrived
