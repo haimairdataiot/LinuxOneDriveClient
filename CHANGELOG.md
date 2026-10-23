@@ -4,6 +4,13 @@ All notable changes to Linux OneDrive. Versions follow `MAJOR.MINOR.PATCH`; each
 release is tagged `vX.Y.Z` and published on
 [GitHub](https://github.com/haimairdataiot/LinuxOneDriveClient/releases).
 
+## 0.3.0 - 2026-10-22
+
+### Added
+- **Choose the account in the activity panel.** With more than one account signed in, the
+  name at the top of the panel is a dropdown: pick an account to see its status, recent
+  activity and storage. *Open folder* and *View online* follow the account you pick.
+
 ## 0.2.1 - 2026-10-10
 
 ### Fixed

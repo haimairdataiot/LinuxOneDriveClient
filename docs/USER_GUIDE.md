@@ -60,6 +60,10 @@ view under *Visible Columns*.
   Activity*) for the activity panel.
 - **Activity panel:** the status, a progress bar, recently synced files (click one to open
   it; ⋮ for share, copy link, version history) and how much storage you use.
+- **More than one account:** add another with the person icon at the top left of the
+  activity panel → *Add an Account…*. The panel shows one account at a time: the name at
+  the top becomes a dropdown, and picking an account there shows its status, recent files
+  and storage (*Open folder* and *View online* follow it too).
 - **Pause syncing:** choose 2, 8 or 24 hours from the tray or the ⚙ menu. Syncing also
   pauses on metered networks (and in power-saver mode, if you turn that option on).
 - **Share:** right-click → OneDrive → *Share…*, *Copy Link* or *Manage Access* (see

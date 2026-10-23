@@ -2,7 +2,8 @@
 //!
 //! Header (account switcher · open folder · view online · help & settings),
 //! a status card with progress, banners for things needing attention, the
-//! recent activity list and a storage meter.
+//! recent activity list and a storage meter. With more than one account the
+//! title is a dropdown that chooses which account the panel shows.
 
 use crate::client::{self, AccountView, Model};
 use crate::{App, dialogs, util};
@@ -10,13 +11,19 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 use od_core::dbus::ActivityEntry;
 use od_core::types::ActivityKind;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct ActivityWindow {
     pub window: adw::ApplicationWindow,
     title: adw::WindowTitle,
+    /// Takes the title's place when there is more than one account.
+    account_picker: gtk::DropDown,
+    /// The accounts the dropdown lists, for its rows to read.
+    picker_accounts: Rc<RefCell<Vec<AccountView>>>,
+    /// Set while the dropdown is changed from the model, not by the user.
+    picker_quiet: Rc<Cell<bool>>,
     account_button: gtk::MenuButton,
     gear: gtk::MenuButton,
     banner: adw::Banner,
@@ -52,7 +59,30 @@ impl ActivityWindow {
         // ---- header
         let header = adw::HeaderBar::new();
         let title = adw::WindowTitle::new(od_core::APP_NAME, "");
-        header.set_title_widget(Some(&title));
+        let picker_accounts: Rc<RefCell<Vec<AccountView>>> = Rc::new(RefCell::new(Vec::new()));
+        let account_picker = gtk::DropDown::builder()
+            .model(&gtk::StringList::new(&[]))
+            .factory(&Self::picker_factory(&picker_accounts, false))
+            .list_factory(&Self::picker_factory(&picker_accounts, true))
+            .tooltip_text("Choose an account")
+            .visible(false)
+            .build();
+        account_picker.update_property(&[gtk::accessible::Property::Label("Account")]);
+        let picker_quiet = Rc::new(Cell::new(false));
+        let quiet = picker_quiet.clone();
+        account_picker.connect_selected_notify(move |picker| {
+            if quiet.get() {
+                return;
+            }
+            if let Some(item) = picker.selected_item().and_downcast::<gtk::StringObject>() {
+                let path = item.string().to_string();
+                let _ = WidgetExt::activate_action(picker, "app.switch-account", Some(&path.to_variant()));
+            }
+        });
+        let titles = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        titles.append(&title);
+        titles.append(&account_picker);
+        header.set_title_widget(Some(&titles));
         let account_button =
             gtk::MenuButton::builder().icon_name("avatar-default-symbolic").tooltip_text("Accounts").build();
         header.pack_start(&account_button);
@@ -180,6 +210,9 @@ impl ActivityWindow {
         let w = ActivityWindow {
             window,
             title,
+            account_picker,
+            picker_accounts,
+            picker_quiet,
             account_button,
             gear,
             banner,
@@ -205,6 +238,97 @@ impl ActivityWindow {
             glib::ControlFlow::Continue
         });
         w
+    }
+
+    /// Rows of the account dropdown, which are object paths of accounts. The
+    /// button reads like the window title (who, which OneDrive); the list
+    /// adds the address, so two accounts of one person can be told apart.
+    fn picker_factory(accounts: &Rc<RefCell<Vec<AccountView>>>, in_list: bool) -> gtk::SignalListItemFactory {
+        let factory = gtk::SignalListItemFactory::new();
+        factory.connect_setup(move |_, item| {
+            let Some(item) = item.downcast_ref::<gtk::ListItem>() else { return };
+            if in_list {
+                let name = gtk::Label::builder().xalign(0.0).build();
+                let detail = gtk::Label::builder().xalign(0.0).css_classes(["caption", "dim-label"]).build();
+                let text = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(2).hexpand(true).build();
+                text.append(&name);
+                text.append(&detail);
+                // The account shown has a check mark, like the rows of a plain dropdown.
+                let check = gtk::Image::from_icon_name("object-select-symbolic");
+                item.bind_property("selected", &check, "opacity")
+                    .transform_to(|_, selected: bool| Some(if selected { 1.0f64 } else { 0.0 }))
+                    .sync_create()
+                    .build();
+                let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+                row.append(&text);
+                row.append(&check);
+                item.set_child(Some(&row));
+            } else {
+                item.set_child(Some(&adw::WindowTitle::new("", "")));
+            }
+        });
+        let accounts = accounts.clone();
+        factory.connect_bind(move |_, item| {
+            let Some(item) = item.downcast_ref::<gtk::ListItem>() else { return };
+            let Some(path) = item.item().and_downcast::<gtk::StringObject>() else { return };
+            let accounts = accounts.borrow();
+            let Some(a) = accounts.iter().find(|a| a.path == path.string().as_str()) else { return };
+            let child = item.child();
+            if let Some(title) = child.and_downcast_ref::<adw::WindowTitle>() {
+                title.set_title(&Self::who(a));
+                title.set_subtitle(&format!("OneDrive \u{2013} {}", a.title()));
+            } else if let Some(row) = child.and_downcast_ref::<gtk::Box>() {
+                let detail =
+                    if a.display_name.is_empty() { a.title() } else { format!("{} \u{b7} {}", a.email, a.title()) };
+                let text = row.first_child();
+                if let Some(name) = text.as_ref().and_then(|t| t.first_child()).and_downcast::<gtk::Label>() {
+                    name.set_label(&Self::who(a));
+                }
+                if let Some(label) = text.and_then(|t| t.last_child()).and_downcast::<gtk::Label>() {
+                    label.set_label(&detail);
+                }
+            }
+        });
+        factory
+    }
+
+    /// The account's owner as shown at the top of the panel.
+    fn who(a: &AccountView) -> String {
+        if a.display_name.is_empty() { a.email.clone() } else { a.display_name.clone() }
+    }
+
+    /// Offer the account dropdown when there is more than one account, and
+    /// keep it on the account shown.
+    fn update_picker(&self, model: &Model, shown: Option<&AccountView>) {
+        let show = model.connected && model.accounts.len() > 1 && shown.is_some();
+        self.account_picker.set_visible(show);
+        self.title.set_visible(!show);
+        if !show {
+            return;
+        }
+        // Only a different list of accounts rebuilds the dropdown; status
+        // updates arrive all the time and must not close it under the pointer.
+        let changed = {
+            let old = self.picker_accounts.borrow();
+            old.len() != model.accounts.len()
+                || old.iter().zip(&model.accounts).any(|(o, n)| {
+                    o.path != n.path
+                        || o.email != n.email
+                        || o.display_name != n.display_name
+                        || o.organization != n.organization
+                })
+        };
+        *self.picker_accounts.borrow_mut() = model.accounts.clone();
+        let paths: Vec<&str> = model.accounts.iter().map(|a| a.path.as_str()).collect();
+        let pos = shown.and_then(|a| paths.iter().position(|p| *p == a.path)).unwrap_or(0) as u32;
+        self.picker_quiet.set(true);
+        if changed {
+            self.account_picker.set_model(Some(&gtk::StringList::new(&paths)));
+        }
+        if self.account_picker.selected() != pos {
+            self.account_picker.set_selected(pos);
+        }
+        self.picker_quiet.set(false);
     }
 
     fn gear_menu(model: &Model) -> gio::Menu {
@@ -261,6 +385,7 @@ impl ActivityWindow {
         for c in ["idle", "syncing", "paused", "offline", "error", "signin-required", "signed-out", "starting"] {
             self.status_card.remove_css_class(&format!("state-{c}"));
         }
+        self.update_picker(model, acct.as_ref());
         let Some(a) = acct.filter(|_| model.connected) else {
             self.title.set_title(od_core::APP_NAME);
             self.title.set_subtitle(if model.connected { "Not signed in" } else { "Connecting…" });
@@ -277,8 +402,7 @@ impl ActivityWindow {
         self.status_card.set_visible(true);
         self.footer.set_visible(true);
         // Header: who and which OneDrive (the window title already names the app).
-        let who = if a.display_name.is_empty() { a.email.clone() } else { a.display_name.clone() };
-        self.title.set_title(&who);
+        self.title.set_title(&Self::who(&a));
         self.title.set_subtitle(&format!("OneDrive \u{2013} {}", a.title()));
         self.status_card.add_css_class(&format!("state-{}", a.state));
         self.status_icon.set_icon_name(Some(util::state_icon(&a.state)));
@@ -319,6 +443,8 @@ impl ActivityWindow {
         self.update_banner(model, &a);
         if self.loaded_for.borrow().as_deref() != Some(a.path.as_str()) {
             *self.loaded_for.borrow_mut() = Some(a.path.clone());
+            // Another account: nothing of the previous one may stay on screen.
+            self.entries.borrow_mut().clear();
             self.load_activity(&a.path);
         } else {
             self.render_list();
@@ -403,13 +529,18 @@ impl ActivityWindow {
     fn load_activity(&self, path: &str) {
         let path = path.to_string();
         let me = self.clone();
+        let wanted = path.clone();
         client::call(
             async move { client::account(&path).await?.recent_activity(50).await },
             move |r: zbus::Result<String>| {
+                // A late answer for an account that is no longer shown is dropped.
+                if me.loaded_for.borrow().as_deref() != Some(wanted.as_str()) {
+                    return;
+                }
                 if let Ok(json) = r {
                     *me.entries.borrow_mut() = serde_json::from_str(&json).unwrap_or_default();
-                    me.render_list();
                 }
+                me.render_list();
             },
         );
     }
