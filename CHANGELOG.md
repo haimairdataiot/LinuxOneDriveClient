@@ -4,6 +4,25 @@ All notable changes to Linux OneDrive. Versions follow `MAJOR.MINOR.PATCH`; each
 release is tagged `vX.Y.Z` and published on
 [GitHub](https://github.com/haimairdataiot/LinuxOneDriveClient/releases).
 
+## 0.3.1 - 2026-10-22
+
+### Fixed
+- **An account can no longer be added twice.** When two sign-ins to the same account
+  finished at about the same time (for example one in the web browser and one in the
+  app's own sign-in page), both could add it, and the account then appeared twice with two
+  folders. Sign-ins now finish one at a time, and signing in to an account that is already
+  set up only renews its sign-in. If an account is already set up twice, the service log
+  says so; see the user guide for removing the extra one.
+- In the activity panel's account list, two accounts that would read the same also show
+  their folders, so you can tell them apart.
+- **Installing an update no longer waits forever when no password prompt appears.** The
+  update window says what it is waiting for: your approval, another software update that
+  has to finish first, or the installation itself. While it waits for approval you can
+  cancel, and after a while it explains that the prompt may be in another session and how to
+  install from a terminal instead.
+- Opening the update window again while an update is being installed shows the same window
+  instead of starting a second installation.
+
 ## 0.3.0 - 2026-10-22
 
 ### Added

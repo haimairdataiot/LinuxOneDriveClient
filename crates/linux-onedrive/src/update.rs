@@ -12,6 +12,7 @@ use crate::{App, util};
 use adw::prelude::*;
 use gtk::{gio, glib};
 use od_core::update::UpdateInfo;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 async fn info(force: bool) -> zbus::Result<UpdateInfo> {
@@ -89,6 +90,9 @@ pub fn settings_group(
 
 /// The update dialog (from the notification, the tray, Settings or `--show update`).
 pub fn dialog(app: &Rc<App>, parent: Option<gtk::Widget>) {
+    if present_open() {
+        return;
+    }
     let app = app.clone();
     client::call(info(true), move |r| {
         let u = match r {
@@ -155,9 +159,14 @@ fn build_dialog(app: &Rc<App>, parent: Option<gtk::Widget>, u: UpdateInfo) {
     buttons.set_margin_top(6);
     let later =
         gtk::Button::builder().label(if u.available { "Not Now" } else { "Close" }).css_classes(["pill"]).build();
-    let d = dialog.clone();
-    later.connect_clicked(move |_| {
-        d.close();
+    // While the system's password prompt is up, this button cancels instead.
+    let running: Running = Rc::new(RefCell::new(None));
+    let (d, r) = (dialog.clone(), running.clone());
+    later.connect_clicked(move |_| match r.borrow().as_ref() {
+        Some(proc) => proc.send_signal(SIGTERM),
+        None => {
+            d.close();
+        }
     });
     buttons.append(&later);
     if u.available && u.installable {
@@ -167,17 +176,44 @@ fn build_dialog(app: &Rc<App>, parent: Option<gtk::Widget>, u: UpdateInfo) {
         install.connect_clicked(move |b| {
             b.set_sensitive(false);
             later.set_sensitive(false);
+            dialog2.set_can_close(false);
             status.set_visible(true);
             status.set_text("Downloading and checking the update\u{2026}");
             let (app, status, later, b2, dialog3, version) =
                 (app.clone(), status.clone(), later.clone(), b.clone(), dialog2.clone(), version.clone());
-            install_update(move |step| match step {
-                Step::Approving => status.set_text("Waiting for your approval to install\u{2026}"),
-                Step::Done => finished(&app, &dialog3, &version),
-                Step::Failed(msg) => {
-                    status.set_text(&msg);
-                    b2.set_sensitive(true);
-                    later.set_sensitive(true);
+            let label = later.label().unwrap_or_default();
+            install_update(running.clone(), move |step| {
+                // Cancel only while nothing has been changed yet.
+                let approving = matches!(step, Step::Approving | Step::NoPrompt(_));
+                later.set_label(if approving { "Cancel" } else { label.as_str() });
+                later.set_sensitive(approving);
+                match step {
+                    Step::Approving => status.set_text("Waiting for your approval to install\u{2026}"),
+                    Step::NoPrompt(path) => {
+                        status.set_text(&format!(
+                            "Waiting for your approval to install\u{2026} If no password prompt has appeared, it may \
+                             be on another screen or in another session. You can cancel and install the update from a \
+                             terminal instead:\nsudo apt install \"{path}\""
+                        ));
+                        // So the command can be copied.
+                        status.set_selectable(true);
+                    }
+                    Step::Busy(other) => status.set_text(&format!(
+                        "Waiting for another software update to finish{}\u{2026}",
+                        if other.is_empty() { String::new() } else { format!(" ({other})") }
+                    )),
+                    Step::Installing => status.set_text("Installing the update\u{2026}"),
+                    Step::Done => {
+                        dialog3.set_can_close(true);
+                        finished(&app, &dialog3, &version);
+                    }
+                    Step::Failed(msg) => {
+                        status.set_text(&msg);
+                        status.set_selectable(msg.contains("sudo "));
+                        b2.set_sensitive(true);
+                        later.set_sensitive(true);
+                        dialog3.set_can_close(true);
+                    }
                 }
             });
         });
@@ -191,18 +227,51 @@ fn build_dialog(app: &Rc<App>, parent: Option<gtk::Widget>, u: UpdateInfo) {
     vbox.append(&buttons);
     tv.set_content(Some(&vbox));
     dialog.set_child(Some(&tv));
+    OPEN.with(|o| *o.borrow_mut() = Some(dialog.clone()));
+    dialog.connect_closed(|_| OPEN.with(|o| *o.borrow_mut() = None));
     dialog.present(parent.as_ref());
 }
 
+thread_local! {
+    /// The update dialog while it is open. Asking for it again brings it
+    /// back instead of opening a second one, so one install runs at a time.
+    static OPEN: RefCell<Option<adw::Dialog>> = const { RefCell::new(None) };
+}
+
+/// Bring back the open update dialog, if there is one.
+fn present_open() -> bool {
+    let Some(dialog) = OPEN.with(|o| o.borrow().clone()) else { return false };
+    match dialog.root().and_downcast::<gtk::Window>() {
+        Some(window) => {
+            window.present();
+            true
+        }
+        None => false,
+    }
+}
+
+/// The installer while the system asks for approval (Cancel stops it).
+type Running = Rc<RefCell<Option<gio::Subprocess>>>;
+
+const SIGTERM: i32 = 15;
+
 enum Step {
     Approving,
+    /// Still no approval after a while: the prompt may not be visible.
+    /// Carries the downloaded package, for installing it by hand.
+    NoPrompt(String),
+    /// The package manager waits for another update (named if known).
+    Busy(String),
+    Installing,
     Done,
     Failed(String),
 }
 
 /// Download (verified by the service), then install with the system's
-/// administrator prompt.
-fn install_update(report: impl Fn(Step) + 'static) {
+/// administrator prompt. Progress comes from the installer's output: pkexec
+/// prints nothing while the prompt is up, so its first line from apt means
+/// the update was approved.
+fn install_update(running: Running, report: impl Fn(Step) + 'static) {
     let report = Rc::new(report);
     client::call(async { client::manager().await?.download_update().await }, move |r: zbus::Result<String>| {
         let path = match r {
@@ -210,7 +279,9 @@ fn install_update(report: impl Fn(Step) + 'static) {
             Err(e) => return report(Step::Failed(util::friendly(&e))),
         };
         report(Step::Approving);
-        let argv = ["pkexec", "/usr/bin/apt-get", "install", "-y", path.as_str()];
+        // Wait for another software update (automatic updates, for example)
+        // to finish rather than failing at once.
+        let argv = ["pkexec", "/usr/bin/apt-get", "-o", "DPkg::Lock::Timeout=600", "install", "-y", path.as_str()];
         let flags = gio::SubprocessFlags::STDOUT_PIPE | gio::SubprocessFlags::STDERR_MERGE;
         let proc = match gio::Subprocess::newv(&argv.map(std::ffi::OsStr::new), flags) {
             Ok(p) => p,
@@ -220,25 +291,89 @@ fn install_update(report: impl Fn(Step) + 'static) {
                 )));
             }
         };
-        let report = report.clone();
+        *running.borrow_mut() = Some(proc.clone());
+        let approved = Rc::new(Cell::new(false));
+        {
+            let (approved, running, report, path) = (approved.clone(), running.clone(), report.clone(), path.clone());
+            glib::timeout_add_seconds_local_once(20, move || {
+                if !approved.get() && running.borrow().is_some() {
+                    report(Step::NoPrompt(path));
+                }
+            });
+        }
         glib::spawn_future_local(async move {
-            let out = proc.communicate_utf8_future(None).await;
-            let code = if proc.has_exited() { proc.exit_status() } else { -1 };
-            match (code, out) {
-                (0, _) => report(Step::Done),
-                // pkexec: 126 = not authorised or dismissed.
-                (126 | 127, _) => {
-                    report(Step::Failed("The update wasn\u{2019}t installed because it wasn\u{2019}t approved.".into()))
+            let mut log = String::new();
+            let mut line = String::new();
+            let mut busy: Option<String> = None;
+            if let Some(out) = proc.stdout_pipe() {
+                while let Ok(chunk) = out.read_bytes_future(4096, glib::Priority::DEFAULT).await {
+                    if chunk.is_empty() {
+                        break;
+                    }
+                    let text = String::from_utf8_lossy(&chunk);
+                    log.push_str(&text);
+                    for c in text.chars() {
+                        if c != '\n' && c != '\r' {
+                            line.push(c);
+                            continue;
+                        }
+                        let l = std::mem::take(&mut line);
+                        let l = l.trim();
+                        if l.is_empty() || l.starts_with("Error executing command as another user") {
+                            continue;
+                        }
+                        if !approved.get() {
+                            approved.set(true);
+                            *running.borrow_mut() = None;
+                        }
+                        let holder = lock_holder(l);
+                        if holder != busy {
+                            busy = holder.clone();
+                            report(match holder {
+                                Some(h) => Step::Busy(h),
+                                None => Step::Installing,
+                            });
+                        }
+                    }
                 }
-                (_, Ok((text, _))) => {
-                    let text = text.map(|t| t.to_string()).unwrap_or_default();
-                    let last = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("unknown error").to_string();
-                    report(Step::Failed(format!("The installer reported a problem: {last}")))
-                }
-                (_, Err(e)) => report(Step::Failed(format!("The installer could not be run: {e}"))),
             }
+            let _ = proc.wait_future().await;
+            let cancelled = running.borrow_mut().take().is_some() && !proc.has_exited();
+            let code = if proc.has_exited() { proc.exit_status() } else { -1 };
+            report(match code {
+                0 => Step::Done,
+                _ if cancelled => Step::Failed("Cancelled. The update wasn\u{2019}t installed.".into()),
+                _ if log.contains("No authentication agent found") => Step::Failed(format!(
+                    "This session has no administrator prompt, so the update can\u{2019}t be approved here. Install it from a terminal: sudo apt install \"{path}\""
+                )),
+                // pkexec: 126 = dismissed, 127 = not authorised.
+                126 | 127 => {
+                    Step::Failed("The update wasn\u{2019}t installed because it wasn\u{2019}t approved.".into())
+                }
+                _ if log.contains("Unable to acquire the dpkg frontend lock") => {
+                    Step::Failed("Another software update is still running. Try again when it has finished.".into())
+                }
+                _ => {
+                    let last = log.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("unknown error");
+                    Step::Failed(format!("The installer reported a problem: {last}"))
+                }
+            });
         });
     });
+}
+
+/// "... It is held by process 1234 (unattended-upgr)" from apt: who holds
+/// the package system, in words (empty when apt doesn't say).
+fn lock_holder(line: &str) -> Option<String> {
+    if !line.contains("Could not get lock") {
+        return None;
+    }
+    let name = line.rsplit_once('(').and_then(|(_, rest)| rest.split_once(')')).map(|(n, _)| n).unwrap_or("");
+    Some(match name {
+        n if n.starts_with("unattended") => "automatic updates".to_string(),
+        "packagekitd" => "Software".to_string(),
+        n => n.to_string(),
+    })
 }
 
 /// The new version is installed: restart the sync service and this app so

@@ -198,3 +198,68 @@ async fn sign_in_setup_sync_over_dbus() {
     let mounts = std::fs::read_to_string("/proc/self/mountinfo").unwrap();
     assert!(!mounts.contains(mount.to_str().unwrap()), "unmounted on exit");
 }
+
+/// Two sign-ins to the same account that finish at the same moment (a
+/// browser sign-in left open and the built-in page, say) add it once. The
+/// slow drive lookup keeps both inside the check at the same time.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn simultaneous_sign_ins_add_the_account_once() {
+    use futures::StreamExt;
+    let mock = MockGraph::start().await;
+    mock.set_latency("/me/drive", 1500);
+    let tmp = tempfile::Builder::new().prefix("lod-twice-").tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let home = tmp.path().join("home");
+    std::fs::create_dir_all(home.join(".config/linux-onedrive")).unwrap();
+    std::fs::write(home.join(".config/linux-onedrive/config.toml"), "[general]\nclient_id = \"00000000-test\"\n")
+        .unwrap();
+    let bus = Bus::start();
+    let child = Command::new(env!("CARGO_BIN_EXE_linux-onedrived"))
+        .env("DBUS_SESSION_BUS_ADDRESS", &bus.address)
+        .env("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent")
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .env("XDG_DATA_HOME", home.join(".local/share"))
+        .env("XDG_STATE_HOME", home.join(".local/state"))
+        .env("XDG_CACHE_HOME", home.join(".cache"))
+        .env("LINUX_ONEDRIVE_GRAPH_URL", mock.base_url())
+        .env("LINUX_ONEDRIVE_LOGIN_URL", mock.base_url())
+        .env("RUST_LOG", "warn")
+        .env_remove("NOTIFY_SOCKET")
+        .env_remove("JOURNAL_STREAM")
+        .spawn()
+        .expect("spawn daemon");
+    let _daemon = DaemonProc { child, mount: home.join("OneDrive") };
+    let conn = zbus::connection::Builder::address(bus.address.as_str()).unwrap().build().await.unwrap();
+    let dbus = zbus::fdo::DBusProxy::new(&conn).await.unwrap();
+    wait_until("daemon on the bus", 15, || async {
+        dbus.name_has_owner(od_core::dbus::BUS_NAME.try_into().unwrap()).await.unwrap_or(false)
+    })
+    .await;
+    let mgr = ManagerProxy::builder(&conn).cache_properties(zbus::proxy::CacheProperties::No).build().await.unwrap();
+    let state_of =
+        |url: &str| url::Url::parse(url).unwrap().query_pairs().find(|(k, _)| k == "state").unwrap().1.into_owned();
+    let mut finished = mgr.receive_sign_in_finished().await.unwrap();
+
+    let (browser_url, browser_redirect) = mgr.begin_sign_in("mock.user@example.com", "browser").await.unwrap();
+    let (page_url, page_redirect) = mgr.begin_sign_in("mock.user@example.com", "embedded").await.unwrap();
+    let browser = async {
+        let to = format!("{browser_redirect}/?code=abc&state={}", state_of(&browser_url));
+        reqwest::get(to).await.unwrap();
+        let signal = tokio::time::timeout(Duration::from_secs(20), finished.next()).await.unwrap().unwrap();
+        let args = signal.args().unwrap();
+        assert!(args.ok, "{}", args.message);
+        args.account.to_string()
+    };
+    let page = async {
+        mgr.complete_sign_in(&format!("{page_redirect}?code=abc&state={}", state_of(&page_url)))
+            .await
+            .unwrap()
+            .to_string()
+    };
+    let (from_browser, from_page) = tokio::join!(browser, page);
+
+    assert_eq!(from_browser, from_page, "both sign-ins name the same account");
+    assert_eq!(mgr.accounts().await.unwrap().len(), 1);
+    let config = std::fs::read_to_string(home.join(".config/linux-onedrive/config.toml")).unwrap();
+    assert_eq!(config.matches("[[account]]").count(), 1, "{config}");
+}

@@ -155,6 +155,9 @@ pub struct DriveState {
     pub business_folder_delta: bool,
     /// The "latest release" the update check sees (GitHub releases API).
     pub release: Option<MockRelease>,
+    /// Requests whose path ends like this are answered this many
+    /// milliseconds late (to widen races).
+    latency: Vec<(String, u64)>,
 }
 
 /// A published app release, as GitHub's API would describe it.
@@ -216,6 +219,7 @@ impl DriveState {
             user_email: "mock.user@example.com".into(),
             business_folder_delta: false,
             release: None,
+            latency: Vec::new(),
         }
     }
 
@@ -841,6 +845,13 @@ impl MockGraph {
         self.state.lock().unwrap().delta_page_size = n.max(1);
     }
 
+    /// Answer requests whose path ends with `path_suffix` `ms` milliseconds late.
+    pub fn set_latency(&self, path_suffix: &str, ms: u64) {
+        let mut s = self.state.lock().unwrap();
+        s.latency.retain(|(p, _)| p != path_suffix);
+        s.latency.push((path_suffix.to_string(), ms));
+    }
+
     pub fn stat(&self, f: impl FnOnce(&Stats) -> u64) -> u64 {
         f(&self.state.lock().unwrap().stats)
     }
@@ -907,6 +918,10 @@ async fn handle(
     body: Bytes,
 ) -> Response {
     let path = uri.path().to_string();
+    let late = state.lock().unwrap().latency.iter().find(|(p, _)| path.ends_with(p.as_str())).map(|(_, ms)| *ms);
+    if let Some(ms) = late {
+        tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+    }
     let query = query_map(&uri);
     let mut s = state.lock().unwrap();
     s.stats.requests += 1;

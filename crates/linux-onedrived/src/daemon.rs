@@ -91,6 +91,8 @@ pub struct Daemon {
     pub accounts: Mutex<BTreeMap<String, Arc<AccountRt>>>,
     pending: Mutex<Option<PendingSignIn>>,
     signin_task: Mutex<Option<CancellationToken>>,
+    /// Sign-ins finish one at a time (see `finish_tokens`).
+    finishing: tokio::sync::Mutex<()>,
     /// 0 = not paused, -1 = until resumed, else unix seconds.
     paused_until: Mutex<i64>,
     pause_timer: Mutex<Option<CancellationToken>>,
@@ -115,6 +117,7 @@ impl Daemon {
             accounts: Mutex::new(BTreeMap::new()),
             pending: Mutex::new(None),
             signin_task: Mutex::new(None),
+            finishing: tokio::sync::Mutex::new(()),
             paused_until: Mutex::new(0),
             pause_timer: Mutex::new(None),
             conditions: Mutex::new(Conditions::default()),
@@ -139,6 +142,20 @@ impl Daemon {
     pub async fn start(self: &Arc<Self>) -> anyhow::Result<()> {
         self.conn.object_server().at(api::MANAGER_PATH, ManagerIface { d: self.clone() }).await?;
         let accounts = self.cfg().accounts;
+        // Versions before 0.3.1 could add an account twice when two sign-ins
+        // finished together; say so, since syncing one OneDrive into two
+        // folders is never what was meant.
+        for (i, a) in accounts.iter().enumerate() {
+            let id = od_graph::client::normalize_drive_id(&a.drive_id);
+            if let Some(b) = accounts[..i].iter().find(|b| same_account(b, &id, &a.email, a.drive_type)) {
+                tracing::warn!(
+                    "{} is set up twice ({} and {}); unlink one of them",
+                    a.email,
+                    b.mount_point.display(),
+                    a.mount_point.display()
+                );
+            }
+        }
         for a in accounts {
             if let Err(e) = self.add_account_runtime(a.clone()).await {
                 tracing::error!(account = %a.id, "cannot load account: {e:#}");
@@ -509,6 +526,11 @@ impl Daemon {
 
     /// Create the account (or re-authenticate an existing one) from fresh tokens.
     async fn finish_tokens(self: &Arc<Self>, tokens: TokenSet, tenant: &str) -> anyhow::Result<String> {
+        // One at a time: two sign-ins finishing together (a browser sign-in
+        // left open and the built-in page, say) would otherwise both find no
+        // account yet and both add it. Saving the tokens can wait for the
+        // keyring to be unlocked, so the window is not small.
+        let _one_at_a_time = self.finishing.lock().await;
         let probe_tm = Arc::new(TokenManager::new(self.http.clone(), self.oauth()?, tokens.clone(), Arc::new(|_| {})));
         let probe = GraphClient::new(self.http.clone(), graph_base_from_env(), probe_tm);
         let me = probe.me().await.context("reading your profile")?;
@@ -520,18 +542,38 @@ impl Daemon {
             _ => DriveType::Personal,
         };
 
-        // Re-authentication of a known account.
-        let existing = self.accounts.lock().unwrap().values().find(|a| a.cfg().drive_id == drive_id).cloned();
-        if let Some(acct) = existing {
-            secrets::save(&acct.id, &acct.cfg().email, &tokens).await?;
-            acct.tokens.replace(tokens).await;
-            if let Some(e) = acct.engine() {
-                e.refresh();
-                e.local_changed();
+        let email = me.email();
+
+        // Re-authentication of a known account. Every configured account
+        // counts, also one that is not running (it failed to start, say).
+        let known = self.cfg().accounts.into_iter().find(|a| same_account(a, &drive_id, &email, drive_type));
+        if let Some(cfg) = known {
+            secrets::save(&cfg.id, &cfg.email, &tokens).await?;
+            match self.account(&cfg.id) {
+                Some(acct) => {
+                    acct.tokens.replace(tokens).await;
+                    if let Some(e) = acct.engine() {
+                        e.refresh();
+                        e.local_changed();
+                    }
+                }
+                None => {
+                    let acct = self.add_account_runtime(cfg.clone()).await?;
+                    if cfg.setup_complete && !cfg.disabled {
+                        let me = self.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = me.start_account(&acct).await {
+                                tracing::error!(account = %acct.id, "cannot start account: {e:#}");
+                                *acct.error.lock().unwrap() = Some(format!("{e:#}"));
+                                me.state_changed().await;
+                            }
+                        });
+                    }
+                }
             }
-            tracing::info!(account = %acct.id, "signed in again");
+            tracing::info!(account = %cfg.id, "signed in again");
             self.state_changed().await;
-            return Ok(acct.id.clone());
+            return Ok(cfg.id);
         }
 
         let organization = if drive_type == DriveType::Personal {
@@ -557,7 +599,7 @@ impl Daemon {
             .unwrap_or_else(|| tenant.to_string());
         let a = AccountConfig {
             id: id.clone(),
-            email: me.email(),
+            email,
             display_name: me.display_name.clone().unwrap_or_default(),
             organization,
             drive_id,
@@ -1204,6 +1246,14 @@ fn merge(dst: &mut serde_json::Value, patch: serde_json::Value) {
     }
 }
 
+/// Whether a configured account is the one just signed in to: the same
+/// drive, or the same address with the same kind of OneDrive. (One address
+/// can have both a personal and a work or school OneDrive; those differ.)
+fn same_account(a: &AccountConfig, drive_id: &str, email: &str, drive_type: DriveType) -> bool {
+    od_graph::client::normalize_drive_id(&a.drive_id) == drive_id
+        || (!email.is_empty() && a.email.eq_ignore_ascii_case(email) && a.drive_type == drive_type)
+}
+
 fn rand_u32() -> u32 {
     use rand::Rng;
     rand::rng().random()
@@ -1212,6 +1262,22 @@ fn rand_u32() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_account_by_drive_or_by_address_and_kind() {
+        let a: AccountConfig = serde_json::from_value(serde_json::json!({
+            "id": "1", "email": "Pat@Example.com", "drive_id": "ABCDEF0123456789",
+            "drive_type": "personal", "mount_point": "/home/u/OneDrive",
+        }))
+        .unwrap();
+        // The same drive, however its ID was written.
+        assert!(same_account(&a, "abcdef0123456789", "", DriveType::Personal));
+        // The same address and kind, even with another drive ID.
+        assert!(same_account(&a, "0000000000000001", "pat@example.com", DriveType::Personal));
+        // The same address with a work or school OneDrive is another account.
+        assert!(!same_account(&a, "b!work-drive", "pat@example.com", DriveType::Business));
+        assert!(!same_account(&a, "0000000000000001", "sam@example.com", DriveType::Personal));
+    }
 
     #[test]
     fn settings_merge() {

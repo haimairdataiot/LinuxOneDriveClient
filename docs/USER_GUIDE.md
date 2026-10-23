@@ -176,6 +176,20 @@ notes are on [GitHub](https://github.com/haimairdataiot/LinuxOneDriveClient/rele
   unexpectedly. Restarting it cleans this up automatically.
 - **No tray icon on GNOME:** enable the AppIndicator extension in *Extensions*.
 - **No emblems in Files:** install `python3-nautilus` and run `nautilus -q`.
+- **Install Update keeps waiting for your approval, but no password prompt appears:** the
+  prompt may have opened in another session or on another screen. Cancel (or close the app),
+  then install from a terminal, which asks for your password there:
+  ```bash
+  linux-onedrivectl update --install
+  ```
+  Then quit and reopen the Linux OneDrive app.
+- **The same account appears twice** (versions before 0.3.1 could add it twice): list the
+  accounts, then unlink the one whose folder you don't use. Its downloaded files are kept in
+  `~/.local/share/linux-onedrive/unlinked/`.
+  ```bash
+  linux-onedrivectl accounts
+  linux-onedrivectl logout --account <id>
+  ```
 - **The app closes when you press Sign In (Ubuntu 24.04, version 0.2.0):** update to 0.2.1
   or newer. Until then, sign in from a terminal with `linux-onedrivectl login`, which uses
   your web browser.

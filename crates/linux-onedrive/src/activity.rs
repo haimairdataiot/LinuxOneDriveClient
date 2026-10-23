@@ -272,14 +272,22 @@ impl ActivityWindow {
             let Some(item) = item.downcast_ref::<gtk::ListItem>() else { return };
             let Some(path) = item.item().and_downcast::<gtk::StringObject>() else { return };
             let accounts = accounts.borrow();
-            let Some(a) = accounts.iter().find(|a| a.path == path.string().as_str()) else { return };
+            // Rows are reused: one whose account is gone is blanked, never left
+            // showing the account it showed before.
+            let gone = AccountView::default();
+            let a = accounts.iter().find(|a| a.path == path.string().as_str()).unwrap_or(&gone);
             let child = item.child();
             if let Some(title) = child.and_downcast_ref::<adw::WindowTitle>() {
                 title.set_title(&Self::who(a));
                 title.set_subtitle(&format!("OneDrive \u{2013} {}", a.title()));
             } else if let Some(row) = child.and_downcast_ref::<gtk::Box>() {
-                let detail =
+                let mut detail =
                     if a.display_name.is_empty() { a.title() } else { format!("{} \u{b7} {}", a.email, a.title()) };
+                // Two accounts that read the same are told apart by their folders.
+                if accounts.iter().any(|o| o.path != a.path && o.email == a.email && o.title() == a.title()) {
+                    let folder = std::path::Path::new(&a.mount_point).file_name().map(|f| f.to_string_lossy());
+                    detail = format!("{detail} \u{b7} {}", folder.unwrap_or_default());
+                }
                 let text = row.first_child();
                 if let Some(name) = text.as_ref().and_then(|t| t.first_child()).and_downcast::<gtk::Label>() {
                     name.set_label(&Self::who(a));
