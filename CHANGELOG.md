@@ -4,6 +4,27 @@ All notable changes to Linux OneDrive. Versions follow `MAJOR.MINOR.PATCH`; each
 release is tagged `vX.Y.Z` and published on
 [GitHub](https://github.com/haimairdataiot/LinuxOneDriveClient/releases).
 
+## 0.4.0 - 2026-11-09
+
+### Added
+- **Sync Now** in the activity panel's ⚙ menu (also F5 there), the tray menu and
+  `linux-onedrivectl sync`: checks OneDrive for changes right away and retries anything that
+  is waiting after a failure.
+
+### Changed
+- **Files added or changed elsewhere arrive sooner.** Work and school OneDrives can announce
+  a change before they list it, so one check right after the announcement could miss it
+  and the file then waited for the next check, up to five minutes later. Linux OneDrive
+  now checks a few more times over the following minute, and checks every minute even
+  while change announcements are working.
+- **Files windows show new items by themselves.** Items added, removed or renamed online
+  raise no event that the Files app notices, so they only appeared after pressing F5 or
+  reopening the folder. Files windows showing such a folder are now refreshed.
+
+### Fixed
+- After the sync service restarts (for example after an update), the activity panel shows
+  the last known storage use instead of "Checking storage..." for up to five minutes.
+
 ## 0.3.1 - 2026-10-22
 
 ### Fixed

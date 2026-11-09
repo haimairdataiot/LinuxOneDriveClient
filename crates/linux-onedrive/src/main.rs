@@ -166,6 +166,7 @@ impl App {
                     util::open_uri(None, &a.web_url);
                 }
             }
+            TrayCmd::SyncNow => self.sync_now(),
             TrayCmd::Pause(s) => client::call(async move { client::manager().await?.pause(s).await }, |_| {}),
             TrayCmd::Resume => client::call(async move { client::manager().await?.resume().await }, |_| {}),
             TrayCmd::Settings => self.show_page("settings"),
@@ -173,6 +174,33 @@ impl App {
             TrayCmd::Issues => self.show_page("issues"),
             TrayCmd::SignIn => self.show_setup(None),
             TrayCmd::Quit => self.confirm_quit(),
+        }
+    }
+
+    /// "Sync Now": every account checks for changes online at once and
+    /// retries whatever is waiting after a failure.
+    pub fn sync_now(self: &Rc<Self>) {
+        let paths: Vec<String> = self.model.borrow().accounts.iter().map(|a| a.path.clone()).collect();
+        if paths.is_empty() {
+            return;
+        }
+        client::call(
+            async move {
+                for p in paths {
+                    client::account(&p).await?.refresh().await?;
+                }
+                Ok::<(), zbus::Error>(())
+            },
+            |r| {
+                if let Err(e) = r {
+                    tracing::warn!("sync now: {e}");
+                }
+            },
+        );
+        if self.window().is_some()
+            && let Some(w) = self.activity.borrow().as_ref()
+        {
+            w.toasts.add_toast(adw::Toast::new("Checking for changes\u{2026}"));
         }
     }
 
@@ -249,6 +277,7 @@ impl App {
         add("recently-removed", Box::new(|a, _| a.show_page("removed")), None);
         add("issues", Box::new(|a, _| a.show_page("issues")), None);
         add("add-account", Box::new(|a, _| a.show_setup(None)), None);
+        add("sync-now", Box::new(|a, _| a.sync_now()), None);
         add(
             "pause",
             Box::new(|_, p| {
@@ -285,6 +314,7 @@ impl App {
             None,
         );
         self.gtk.set_accels_for_action("app.settings", &["<Control>comma"]);
+        self.gtk.set_accels_for_action("app.sync-now", &["F5", "<Control>r"]);
         self.gtk.set_accels_for_action("app.quit-all", &["<Control>q"]);
     }
 }

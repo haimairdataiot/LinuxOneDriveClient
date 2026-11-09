@@ -11,6 +11,7 @@ pub enum TrayCmd {
     ShowActivity,
     OpenFolder,
     ViewOnline,
+    SyncNow,
     Pause(u32),
     Resume,
     Settings,
@@ -111,6 +112,7 @@ impl ksni::Tray for Tray {
             if self.model.paused_until != 0 {
                 m.push(item("Resume Syncing", "media-playback-start-symbolic", |t| t.send(TrayCmd::Resume)));
             } else {
+                m.push(item("Sync Now", "view-refresh-symbolic", |t| t.send(TrayCmd::SyncNow)));
                 m.push(
                     SubMenu {
                         label: "Pause Syncing".into(),

@@ -237,7 +237,7 @@ async fn watch_once(tx: &async_channel::Sender<UiEvent>) -> zbus::Result<()> {
                             tx.send(UiEvent::DeleteReminder { account: account.to_string() }).await.ok();
                         }
                     }
-                    "ItemsChanged" => {}
+                    "ItemsChanged" | "FoldersChanged" => {}
                     _ => pending = true,
                 }
             }

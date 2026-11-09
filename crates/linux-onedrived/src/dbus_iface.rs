@@ -478,7 +478,7 @@ impl AccountIface {
 
     async fn refresh(&self) -> fdo::Result<()> {
         for (e, _) in self.all_engines()? {
-            e.refresh();
+            e.sync_now();
         }
         Ok(())
     }
@@ -638,6 +638,9 @@ impl AccountIface {
 
     #[zbus(signal)]
     pub async fn items_changed(emitter: &SignalEmitter<'_>, paths: Vec<String>) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    pub async fn folders_changed(emitter: &SignalEmitter<'_>, paths: Vec<String>) -> zbus::Result<()>;
 }
 
 /// A path recorded by a shortcut's engine, as the user sees it (through the link).

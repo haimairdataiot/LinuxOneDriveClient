@@ -8,7 +8,9 @@
 
 Status is read with asynchronous GIO xattr queries (answered from the
 daemon's database, no network) and refreshed when the daemon signals that
-items changed. Install to /usr/share/nautilus-python/extensions/ (packaged)
+items changed. Changes made online (a file added on the web, say) raise no
+file-system event in the mounted folder, so when the daemon reports a
+folder whose items changed, windows showing it are reloaded. Install to /usr/share/nautilus-python/extensions/ (packaged)
 or ~/.local/share/nautilus-python/extensions/, then run `nautilus -q`.
 Requires python3-nautilus.
 """
@@ -23,6 +25,12 @@ try:
 except ValueError:
     gi.require_version("Nautilus", "4.0")
 from gi.repository import Gio, GLib, GObject, Nautilus  # noqa: E402
+
+try:
+    gi.require_version("Gtk", "4.0")
+    from gi.repository import Gtk  # noqa: E402
+except (ValueError, ImportError):
+    Gtk = None
 
 BUS = "com.airdataiot.LinuxOneDrive.Daemon"
 MANAGER_PATH = "/com/airdataiot/LinuxOneDrive"
@@ -50,6 +58,13 @@ LABELS = {
 }
 
 
+# Folders that changed online, waiting for the next window reload. Shared:
+# Files can create this extension more than once, and each instance hears
+# the same signal; one reload is enough.
+_changed_folders = set()
+_reload_pending = False
+
+
 def _gui(*args):
     try:
         subprocess.Popen(["linux-onedrive", *args], start_new_session=True)
@@ -75,6 +90,11 @@ class LinuxOneDriveExtension(
         self.bus.signal_subscribe(
             BUS, ACCOUNT_IFACE, "ItemsChanged", None, None,
             Gio.DBusSignalFlags.NONE, self._on_items_changed,
+        )
+        # Show items added, removed or renamed online.
+        self.bus.signal_subscribe(
+            BUS, ACCOUNT_IFACE, "FoldersChanged", None, None,
+            Gio.DBusSignalFlags.NONE, self._on_folders_changed,
         )
         # Re-read the list of mounts whenever accounts change.
         self.bus.signal_subscribe(
@@ -132,6 +152,43 @@ class LinuxOneDriveExtension(
             fi = Nautilus.FileInfo.lookup(Gio.File.new_for_path(p))
             if fi is not None:
                 fi.invalidate_extension_info()
+
+    # ------------------------------------------------------------------ folders
+
+    @staticmethod
+    def _on_folders_changed(conn, sender, path, iface, signal, params):
+        global _reload_pending
+        _changed_folders.update(params.unpack()[0])
+        if not _reload_pending:
+            # Changes come in bursts (a folder of files uploaded on the web).
+            _reload_pending = True
+            GLib.timeout_add(1000, LinuxOneDriveExtension._reload_windows)
+
+    @staticmethod
+    def _reload_windows():
+        """Reload the Files windows showing a folder that changed online, as
+        F5 would."""
+        global _reload_pending
+        _reload_pending = False
+        folders = set(_changed_folders)
+        _changed_folders.clear()
+        if Gtk is None:
+            return False
+        try:
+            windows = Gtk.Window.get_toplevels()
+            for i in range(windows.get_n_items()):
+                window = windows.get_item(i)
+                if GObject.type_name(window.__gtype__) != "NautilusWindow":
+                    continue
+                slot = window.get_property("active-slot")
+                location = slot.get_property("location") if slot is not None else None
+                if location is None or location.get_path() not in folders:
+                    continue
+                if not slot.get_property("loading"):
+                    slot.activate_action("slot.reload", None)
+        except (TypeError, AttributeError, GLib.Error):
+            pass  # another version of Files; the folder updates when reopened
+        return False
 
     def update_file_info_full(self, provider, handle, closure, fi):
         path = self._path(fi)

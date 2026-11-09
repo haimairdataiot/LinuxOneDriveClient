@@ -351,6 +351,7 @@ impl ActivityWindow {
         if model.paused_until != 0 {
             s2.append(Some("Resume Syncing"), Some("app.resume"));
         } else {
+            s2.append(Some("Sync Now"), Some("app.sync-now"));
             let pause = gio::Menu::new();
             for (label, secs) in [("2 Hours", 2u32 * 3600), ("8 Hours", 8 * 3600), ("24 Hours", 24 * 3600)] {
                 let item = gio::MenuItem::new(Some(label), None);

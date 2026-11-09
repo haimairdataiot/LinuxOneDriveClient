@@ -12,12 +12,14 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
+        timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential pkg-config \
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends build-essential pkg-config \
             libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libsqlite3-dev fuse3 dbus
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
@@ -31,13 +33,15 @@ jobs:
   # reports its result without failing the build.
   end-to-end:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
+        timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential pkg-config \
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends build-essential pkg-config \
             libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libsqlite3-dev fuse3 dbus
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable

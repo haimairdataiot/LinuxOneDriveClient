@@ -64,6 +64,11 @@ view under *Visible Columns*.
   activity panel → *Add an Account…*. The panel shows one account at a time: the name at
   the top becomes a dropdown, and picking an account there shows its status, recent files
   and storage (*Open folder* and *View online* follow it too).
+- **Changes made elsewhere** (on the web, on Windows, on a phone) usually arrive within
+  seconds: OneDrive tells Linux OneDrive about them, and it also checks every minute in
+  case a notice gets lost. A Files window showing the folder updates by itself.
+- **Sync now:** ⚙ → **Sync Now** (or F5 in the activity panel, or the tray menu) checks
+  OneDrive for changes right away and retries anything that is waiting after a failure.
 - **Pause syncing:** choose 2, 8 or 24 hours from the tray or the ⚙ menu. Syncing also
   pauses on metered networks (and in power-saver mode, if you turn that option on).
 - **Share:** right-click → OneDrive → *Share…*, *Copy Link* or *Manage Access* (see
@@ -134,6 +139,7 @@ linux-onedrivectl update                 # is there a new version? (--install to
 linux-onedrivectl pin ~/OneDrive/Photos  # always keep on this device
 linux-onedrivectl free ~/OneDrive/Videos # free up space
 linux-onedrivectl pause 2h               # pause syncing
+linux-onedrivectl sync                   # sync now
 linux-onedrivectl share ~/OneDrive/plan.docx            # copy-link default
 linux-onedrivectl share --view --expires 7 ~/OneDrive/plan.docx
 linux-onedrivectl invite ~/OneDrive/plan.docx ana@contoso.com --edit -m "Have a look"

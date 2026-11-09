@@ -158,6 +158,9 @@ pub struct DriveState {
     /// Requests whose path ends like this are answered this many
     /// milliseconds late (to widen races).
     latency: Vec<(String, u64)>,
+    /// Delta lists nothing after this point yet (OneDrive for Business can
+    /// send the change notification before its change feed has the item).
+    delta_held_at: Option<u64>,
 }
 
 /// A published app release, as GitHub's API would describe it.
@@ -220,6 +223,7 @@ impl DriveState {
             business_folder_delta: false,
             release: None,
             latency: Vec::new(),
+            delta_held_at: None,
         }
     }
 
@@ -845,6 +849,13 @@ impl MockGraph {
         self.state.lock().unwrap().delta_page_size = n.max(1);
     }
 
+    /// While held, delta lists no change made after this call (notifications
+    /// still go out). Releasing lets the next delta round see them.
+    pub fn hold_delta(&self, on: bool) {
+        let mut s = self.state.lock().unwrap();
+        s.delta_held_at = if on { Some(s.seq) } else { None };
+    }
+
     /// Answer requests whose path ends with `path_suffix` `ms` milliseconds late.
     pub fn set_latency(&self, path_suffix: &str, ms: u64) {
         let mut s = self.state.lock().unwrap();
@@ -1228,6 +1239,7 @@ fn delta(s: &mut DriveState, query: &HashMap<String, String>, scope: &str, link_
     let skip: usize = query.get("skip").and_then(|v| v.parse().ok()).unwrap_or(0);
     // Snapshot the end of this round on the first page so paging is stable.
     let upto: u64 = query.get("upto").and_then(|v| v.parse().ok()).unwrap_or(s.seq);
+    let upto = s.delta_held_at.map_or(upto, |held| upto.min(held));
 
     // Parents before children: order by depth, then sequence.
     let mut changed: Vec<&MockItem> = s

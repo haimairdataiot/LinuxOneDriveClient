@@ -152,7 +152,9 @@ enum Cmd {
         #[arg(long)]
         restore: bool,
     },
-    /// Check for remote changes now.
+    /// Sync now: check for changes online and retry anything waiting (every
+    /// account, or the one given with --account)
+    #[command(alias = "sync")]
     Refresh,
     /// Back up Desktop/Documents/Pictures/Music/Videos to OneDrive: `backup`, `backup start documents`, `backup stop documents`.
     Backup { action: Option<String>, folder: Option<String> },
@@ -786,7 +788,14 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("Restored to {}", a.restore_removed(&id).await?);
         }
         Cmd::Refresh => {
-            pick_account(&c, &m, acct_sel).await?.refresh().await?;
+            if acct_sel.is_some() {
+                pick_account(&c, &m, acct_sel).await?.refresh().await?;
+            } else {
+                for p in m.accounts().await? {
+                    account_proxy(&c, p.as_str()).await?.refresh().await?;
+                }
+            }
+            println!("Syncing now.");
         }
         Cmd::Settings { assignments } => {
             if assignments.is_empty() {

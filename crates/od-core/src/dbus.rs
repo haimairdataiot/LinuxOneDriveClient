@@ -147,7 +147,8 @@ pub trait Account {
     fn start(&self) -> zbus::Result<()>;
     /// Unlink: unmount, forget tokens and local state (keeps nothing online-only).
     fn sign_out(&self) -> zbus::Result<()>;
-    /// Force an immediate remote change check.
+    /// Sync now: check for remote changes at once and retry everything
+    /// waiting after a failure.
     fn refresh(&self) -> zbus::Result<()>;
     /// JSON array of [`RemovedItem`]: copies of files deleted online kept on this device.
     fn list_removed(&self) -> zbus::Result<String>;
@@ -214,6 +215,10 @@ pub trait Account {
     /// Local paths whose status changed (for file-manager emblems).
     #[zbus(signal)]
     fn items_changed(&self, paths: Vec<String>) -> zbus::Result<()>;
+    /// Local folders whose items changed online (added, removed, renamed):
+    /// a file manager showing one should list it again.
+    #[zbus(signal)]
+    fn folders_changed(&self, paths: Vec<String>) -> zbus::Result<()>;
 }
 
 /// One row of the activity feed.

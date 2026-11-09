@@ -959,6 +959,19 @@ impl Daemon {
                                 let _ = AccountIface::items_changed(iface.signal_emitter(), paths).await;
                             }
                         }
+                        EngineEvent::FoldersChanged(paths) => {
+                            if let Ok(iface) = self.conn.object_server().interface::<_, AccountIface>(path.as_str()).await {
+                                let paths: Vec<String> = paths
+                                    .iter()
+                                    .map(|p| match &root {
+                                        Some(r) => r.shown(p),
+                                        None => p.clone(),
+                                    })
+                                    .map(|p| p.to_string_lossy().into_owned())
+                                    .collect();
+                                let _ = AccountIface::folders_changed(iface.signal_emitter(), paths).await;
+                            }
+                        }
                         EngineEvent::MassDeleteHeld(n) => {
                             dirty = true;
                             if self.cfg().notifications.mass_delete {

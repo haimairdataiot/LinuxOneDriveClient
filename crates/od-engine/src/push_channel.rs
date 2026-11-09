@@ -1,7 +1,8 @@
 //! Real-time change notifications (the socket.io channel OneDrive offers
 //! desktop clients). A notification carries no item details; it only means
-//! "something changed", so it triggers a delta round a moment later.
-//! Polling stays on as a safety net, at a slower pace while connected.
+//! "something changed", so it triggers a delta round a moment later, and a
+//! few more over the next minute in case the change feed lags behind the
+//! notification. Polling stays on as a safety net.
 //!
 //! Protocol (research doc 02 §9): GET …/root/subscriptions/socketIo →
 //! notificationUrl; WebSocket to wss://host/socket.io/?EIO=4&transport=websocket&<query>;
@@ -138,6 +139,7 @@ impl Engine {
                     Err(_) if pending_since.is_some() => {
                         pending_since = None;
                         tracing::debug!("change notification received; checking for changes");
+                        self.notified.store(true, Ordering::SeqCst);
                         self.pull_wake.notify_one();
                     }
                     Err(_) => anyhow::bail!("no heartbeat from the notification server"),

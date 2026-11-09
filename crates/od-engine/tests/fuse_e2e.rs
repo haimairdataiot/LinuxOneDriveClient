@@ -420,3 +420,58 @@ async fn push_notifications_bring_changes_immediately() {
     let p = h.path("Shared notes.txt");
     wait_for("change pushed and pulled", 8, move || p.exists()).await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn changes_late_in_the_change_feed_still_arrive_quickly() {
+    // OneDrive for Business can send the notification before delta lists the
+    // change. Polling every 10 minutes: only the follow-up rounds after the
+    // notification can explain a quick update.
+    let h = Harness::start_with(od_mockgraph::MockGraph::start().await, None, |c| {
+        c.poll_interval = std::time::Duration::from_secs(600);
+    })
+    .await;
+    let e = h.engine.clone();
+    wait_for("push channel connected", 10, move || e.push_connected()).await;
+    h.mock.hold_delta(true);
+    h.mock.put_file("/Added on the web.txt", b"late in the feed");
+    // The round the notification starts (after its 2 s debounce) finds nothing.
+    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+    let p = h.path("Added on the web.txt");
+    let p2 = p.clone();
+    assert!(!fs(move || p2.exists()).await, "the held change must not be visible yet");
+    h.mock.hold_delta(false);
+    wait_for("late change picked up by a follow-up round", 15, move || p.exists()).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sync_now_checks_for_changes_at_once() {
+    // No polling to speak of and no notifications: only "Sync now" can bring it.
+    let h = Harness::start_with(od_mockgraph::MockGraph::start().await, None, |c| {
+        c.poll_interval = std::time::Duration::from_secs(600);
+        c.push_notifications = false;
+    })
+    .await;
+    // Let the first scheduled round pass.
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    h.mock.put_file("/Synced on request.txt", b"now");
+    h.engine.sync_now();
+    let p = h.path("Synced on request.txt");
+    wait_for("change pulled on request", 8, move || p.exists()).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn storage_quota_is_known_right_after_restart() {
+    let h = Harness::start().await;
+    let before = h.engine.quota().expect("quota fetched on the first pull");
+    let (mock, dir) = h.stop().await;
+
+    // The next fetch is minutes away: the saved figure is shown until then.
+    let h = Harness::start_with(mock, Some(dir), |_| {}).await;
+    let after = h.engine.quota().expect("saved quota loaded at startup");
+    assert_eq!((after.total, after.used, after.state), (before.total, before.used, before.state));
+    let (mock, dir) = h.stop().await;
+
+    // Not tracked: nothing is shown.
+    let h = Harness::start_with(mock, Some(dir), |c| c.track_quota = false).await;
+    assert_eq!(h.engine.quota(), None);
+}

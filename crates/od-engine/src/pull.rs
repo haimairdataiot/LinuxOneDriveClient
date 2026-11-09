@@ -57,24 +57,34 @@ fn delta_unsupported(e: &GraphError) -> bool {
     matches!(e.status(), Some(400 | 405 | 501)) || e.has_code("notSupported")
 }
 
+/// After a change notification, delta rounds this many seconds apart.
+/// OneDrive for Business can notify before its change feed lists the change
+/// (a file added on the web shows up in delta seconds to a minute later), so
+/// one round right away is not enough. A new notification starts over.
+const FOLLOW_UPS: [u64; 4] = [5, 10, 15, 30];
+
 impl Engine {
     pub(crate) async fn pull_loop(self: Arc<Self>) {
         let mut failures: u32 = 0;
+        // Position in FOLLOW_UPS while following up on a notification.
+        let mut follow_up: Option<usize> = None;
         loop {
-            // With real-time notifications, polling is only a safety net; a
-            // full listing is expensive and runs on its own, longer interval.
+            // A full listing is expensive and runs on its own, longer
+            // interval. Delta polling stays at the normal pace even with
+            // real-time notifications: notifications can be late or lost.
             let base = if self.uses_listing() {
                 self.cfg().listing_interval.max(self.cfg().poll_interval)
-            } else if self.push_connected() {
-                self.cfg().poll_interval.max(Duration::from_secs(300))
             } else {
                 self.cfg().poll_interval
             };
-            let wait = if failures > 0 {
+            let mut wait = if failures > 0 {
                 (Duration::from_secs(15) * failures.min(20)).min(base.max(Duration::from_secs(15)))
             } else {
                 base
             };
+            if let Some(i) = follow_up {
+                wait = wait.min(Duration::from_secs(FOLLOW_UPS[i]));
+            }
             tokio::select! {
                 _ = self.cancel.cancelled() => return,
                 _ = self.pull_wake.notified() => {}
@@ -83,6 +93,11 @@ impl Engine {
             if self.is_paused() || self.is_auth_required() {
                 continue;
             }
+            follow_up = if self.notified.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                Some(0)
+            } else {
+                follow_up.and_then(|i| (i + 1 < FOLLOW_UPS.len()).then_some(i + 1))
+            };
             match self.pull_once().await {
                 Ok(_) => {
                     failures = 0;
@@ -349,12 +364,25 @@ impl Engine {
             let _ = self.content.remove(*ino);
         }
         let any = ctx.applied > 0 || !ctx.invals.is_empty();
+        // Folders that gained, lost or renamed items (content changes of
+        // existing files are Inode invalidations and don't count).
+        let mut folders: Vec<u64> = ctx
+            .invals
+            .iter()
+            .filter_map(|i| match i {
+                Inval::Entry { parent, .. } | Inval::Delete { parent, .. } => Some(*parent),
+                Inval::Inode { .. } => None,
+            })
+            .collect();
+        folders.sort_unstable();
+        folders.dedup();
         self.invalidate(std::mem::take(&mut ctx.invals));
         if ctx.shortcuts_dirty {
             self.rebuild_links();
             self.emit(EngineEvent::ShortcutsChanged);
         }
         self.items_changed(&ctx.changed);
+        self.folders_changed(&folders);
         for name in &ctx.kept_changes {
             self.activity(
                 ActivityKind::Conflict,

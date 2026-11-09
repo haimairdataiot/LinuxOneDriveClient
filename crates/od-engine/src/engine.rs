@@ -110,6 +110,10 @@ pub enum EngineEvent {
     Activity(ActivityEntry),
     /// Local paths whose status emblem may have changed.
     ItemsChanged(Vec<PathBuf>),
+    /// Local folders whose list of items changed online (items added,
+    /// removed or renamed). No file-system event tells a file manager about
+    /// these, so it has to be told.
+    FoldersChanged(Vec<PathBuf>),
     ProgressChanged,
     MassDeleteHeld(u32),
     /// A user-facing notice (the daemon decides whether to show a notification).
@@ -246,6 +250,8 @@ pub struct Engine {
     pub(crate) streams: Mutex<HashMap<u64, Arc<crate::stream::Stream>>>,
     pub(crate) thumbs: crate::thumbs::ThumbQueue,
     pub(crate) push_connected: AtomicBool,
+    /// A change notification arrived since the last delta round.
+    pub(crate) notified: AtomicBool,
     transfers: Mutex<HashMap<u64, Transfer>>,
     notifier: Mutex<Option<fuser::Notifier>>,
     pub(crate) held_deletes: AtomicU32,
@@ -276,6 +282,9 @@ impl Engine {
         od_core::paths::ensure_private_dir(&cfg.account_dir)?;
         let content = ContentStore::open(&cfg.account_dir)?;
         let (store, recovered_from) = open_store_with_recovery(&cfg.account_dir)?;
+        // The last known quota, shown until the next refresh (up to five
+        // minutes after a restart).
+        let quota = if cfg.track_quota { saved_quota(&store) } else { None };
         let (events, _) = broadcast::channel(1024);
         let engine = Arc::new(Engine {
             cfg: RwLock::new(cfg),
@@ -297,12 +306,13 @@ impl Engine {
             streams: Mutex::new(HashMap::new()),
             thumbs: crate::thumbs::ThumbQueue::default(),
             push_connected: AtomicBool::new(false),
+            notified: AtomicBool::new(false),
             transfers: Mutex::new(HashMap::new()),
             notifier: Mutex::new(None),
             held_deletes: AtomicU32::new(0),
             delete_noted: AtomicBool::new(false),
             mass_delete_approved: AtomicBool::new(false),
-            quota: Mutex::new(None),
+            quota: Mutex::new(quota),
             cancel: CancellationToken::new(),
             last_activity_ping: AtomicU64::new(0),
             started: Instant::now(),
@@ -733,6 +743,14 @@ impl Engine {
         self.emit(EngineEvent::ItemsChanged(paths));
     }
 
+    pub(crate) fn folders_changed(&self, inos: &[u64]) {
+        if inos.is_empty() {
+            return;
+        }
+        let paths = inos.iter().map(|i| self.local_path(*i)).collect();
+        self.emit(EngineEvent::FoldersChanged(paths));
+    }
+
     /// A synced item was deleted on this device.
     pub(crate) fn note_local_delete(&self) {
         if !self.delete_noted.swap(true, Ordering::SeqCst) {
@@ -749,6 +767,15 @@ impl Engine {
     pub fn refresh(&self) {
         self.refresh_requested.store(true, Ordering::SeqCst);
         self.pull_wake.notify_one();
+    }
+
+    /// "Sync now": check for remote changes at once and retry everything
+    /// that is waiting after a failure, instead of at its next turn.
+    pub fn sync_now(&self) {
+        let _ = store::reset_backoff(&self.store.lock());
+        self.push_wake.notify_one();
+        self.hydrate_wake.notify_one();
+        self.refresh();
     }
 
     // ------------------------------------------------------------ startup checks
@@ -1002,6 +1029,12 @@ pub(crate) fn unique_name(c: &rusqlite::Connection, parent: u64, name: &str, hos
         }
     }
     Err(EngineError::Other("no free name".into()))
+}
+
+/// The drive quota saved by the last refresh, if any.
+fn saved_quota(store: &Store) -> Option<od_graph::model::Quota> {
+    let v = store::kv_get(&store.lock(), "quota").ok().flatten()?;
+    serde_json::from_str(&v).ok()
 }
 
 /// Open the database; on corruption, move it aside (never delete it) and fall
